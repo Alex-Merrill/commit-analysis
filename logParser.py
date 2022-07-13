@@ -1,131 +1,85 @@
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import pandas as pd
-
 import sys
-import os
 import re
-import csv
+import git
 
 
-
-class Commit():
-
-    def __init__(self, head, user, email, date, content, files, insert=None, delete=None):
-        self.head = head
-        self.user = user
-        self.email = email
-        self.date = date
-        self.content = content
-        self.files = files
-        self.insert = insert
-        self.delete = delete
-
-
-def run(file_name: str):
+def run(data):
     # parse file and return list of commits
-    data = parse_file(file_name)
+    commits = parse_data(data)
 
     # generate csv file from list of commits
-    make_csv(data)
-
-    # turn csv into pandas dataframe with proper column names
-    data_frame = pd.read_csv("data.csv", header=None)
-    data_frame.rename(columns={0: 'head', 1: 'user', 2: 'email', 3: 'date', 4: 'content', 5: 'files', 6: 'insert', 7: 'delete'}, inplace=True)
+    df = pd.DataFrame.from_records(commits)
 
     # visualize data
-    visualize(data_frame)
-    
-    
+    visualize(df)
+
+
+def parse_data(data):
+    commits = []
+    for line in data:
+        # print(line)
+        commit_arr = [i.strip() for i in line.split(",")]
+
+        # figure out when commit message ends in commit_arr
+        # next element after commit message is files changed
+        files_changed_index = -1
+        message = ""
+        for i in range(5, len(commit_arr)):
+            changed = re.search("files changed", commit_arr[i]) or re.search("file changed", commit_arr[i])
+            if not changed:
+                message += commit_arr[i]
+            else:
+                files_changed_index = i
+                break
+
+        # get number of files changed
+        files_changed = int(commit_arr[files_changed_index].split(" ")[0])
+
+        # get number of insertions/deletions
+        insertions = 0
+        deletions = 0
+        for i in range(files_changed_index+1, len(commit_arr)):
+            if re.search("insertions", commit_arr[i]) or re.search("insertion", commit_arr[i]):
+                insertions = int(commit_arr[i].split(" ")[0])
+            elif re.search("deletions", commit_arr[i]) or re.search("deletion", commit_arr[i]):
+                deletions = int(commit_arr[i].split(" ")[0])
+
+        # construct newLine object
+        newLine = {'head': commit_arr[0],
+                   'user': commit_arr[1],
+                   'email': commit_arr[2],
+                   'date': commit_arr[3]+" "+commit_arr[4],
+                   'content': message,
+                   'files': files_changed,
+                   'insert': insertions,
+                   'delete': deletions}
+
+        # make commit
+        commits.append(newLine)
+
+    return commits
+
+
 def visualize(df):
     mpl.style.use('ggplot')
-    # print(df)
-    # df[(df["user"] == "wkelley11") & (df["insert"] >= 40) ]
     insertDeleteCount = df.groupby('user').sum()
     insertDeleteCount = insertDeleteCount.sort_values('insert', ascending=False)
-    insertDeleteCount.plot.bar(figsize=(9,8), title="Insert/Delete Count by User")
-    plt.legend(["Insertions", "Deletions"])
+    insertDeleteCount.plot.bar(figsize=(9, 8), title="File Changes/Insertions/Deletions by user")
+    plt.legend(["Files Changed", "Insertions", "Deletions", ])
     plt.show()
-
-def parse_file(file_name: str) -> list:
-    try:
-        with open(file_name) as data:
-            lines = data.readlines()
-            commits = []
-            for line in lines:
-                line = line.replace("\"", "")
-                line = line.split(",")
-
-                # get commit message
-                filesInd = -1
-                message = ""
-                for i in range(5, len(line)):
-                    changed = re.search("files changed", line[i]) or re.search("file changed", line[i])
-                    if not changed:
-                        message += line[i]
-                    else:
-                        filesInd = i
-                        break
-                
-                insertions = ""
-                deletions = ""
-                # check whats after
-                for i in range(filesInd+1, len(line)):
-                    if re.search("insertions", line[i]) or re.search("insertion", line[i]):
-                        insertions = line[i]
-                    if re.search("deletions", line[i]) or re.search("deletion", line[i]):
-                        deletions = line[i]
-                
-                filesChanged = line[filesInd].replace("\t ", "")
-
-                insertions = insertions.replace("\t", "")
-                insertions = insertions.replace("\n", "")[1:]
-                insertions = insertions.split(" ")[0]
-
-                deletions = deletions.replace("\t", "")
-                deletions = deletions.replace("\n", "")[1:]
-                deletions = deletions.split(" ")[0]
-                
-                if line[1] == 'Alex Merrill':
-                    line[1] = 'Alex-Merrill'
-
-                # construct newLine object
-                newLine = { 'head': line[0],
-                            'user': line[1],
-                            'email': line[2],
-                            'date': line[3]+line[4],
-                            'content': message,
-                            'files': filesChanged,
-                            'insert': insertions,
-                            'delete': deletions }
-                
-                # make commit
-                commits.append(Commit(**newLine))
-
-            print("File processed")
-            return commits
-    except FileNotFoundError:
-        print("The file was not found")
-
-def make_csv(data: list):
-    try:
-        with open('data.csv', 'w') as f:
-            writer = csv.writer(f)
-            for dat in data:
-                writer.writerow([dat.head, dat.user, dat.email, dat.date, dat.content, dat.files, dat.insert, dat.delete])
-    except BaseException as e:
-        print('BaseException:', 'data.csv')
-    else:
-        print('Data has been loaded successfully !')
-
-
 
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Command Line Arguments:")
-        print("python3 s3upload.py 'absolute file path'")
+        print("python3 logParser.py 'path of repo'")
     else:
-        run(sys.argv[1])
-        
+        repo = git.Repo(sys.argv[1])
+        log = repo.git.log("--pretty=format:'\"%h\",\"%an\",\"%ae\",\"%aD\",\"%s\",'",
+                           "--shortstat", "--no-merges")
+        data = [i.replace("\n", "").replace("'", "").replace('"', "") for i in log.split("\n\n")]
 
+        run(data)
