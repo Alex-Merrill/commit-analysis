@@ -6,11 +6,11 @@ import re
 import git
 
 
-def run(data):
+def main(data):
     # parse file and return list of commits
     commits = parse_data(data)
 
-    # generate csv file from list of commits
+    # generate pandas data frame from list of commits
     df = pd.DataFrame.from_records(commits)
 
     # visualize data
@@ -82,4 +82,4 @@ if __name__ == "__main__":
                            "--shortstat", "--no-merges")
         data = [i.replace("\n", "").replace("'", "").replace('"', "") for i in log.split("\n\n")]
 
-        run(data)
+        main(data)
