@@ -1,0 +1,334 @@
+set tabstop=4 softtabstop=4
+set shiftwidth=4
+set expandtab
+set exrc
+set guicursor=
+set relativenumber
+set nu
+set nohlsearch
+set hidden
+set noerrorbells
+set nowrap
+set noswapfile
+set nobackup
+set undodir=~/.vim/undodir
+set undofile
+set incsearch
+set scrolloff=8
+set colorcolumn=80
+set signcolumn=yes
+set cmdheight=2
+
+
+" JSX/TSX highlighitng
+autocmd BufNewFile,BufRead *.tsx,*.jsx set filetype=typescriptreact
+filetype plugin indent on
+" dark red
+hi tsxTagName guifg=#E06C75
+hi tsxComponentName guifg=#E06C75
+hi tsxCloseComponentName guifg=#E06C75
+
+" orange
+hi tsxCloseString guifg=#F99575
+hi tsxCloseTag guifg=#F99575
+hi tsxCloseTagName guifg=#F99575
+hi tsxAttributeBraces guifg=#F99575
+hi tsxEqual guifg=#F99575
+
+" yellow
+hi tsxAttrib guifg=#F8BD7F cterm=italic
+
+"" ============================================================
+"" Key Mappings  ==============================================
+"" ============================================================
+
+let mapleader='\'
+nnoremap <leader>ff <cmd>Telescope find_files<cr>
+nnoremap <leader>fg <cmd>Telescope live_grep<cr>
+
+"" ============================================================
+"" Key Mappings  ==============================================
+"" ============================================================
+
+
+"" ============================================================
+"" Init Plugins  ==============================================
+"" ============================================================
+
+call plug#begin('~/.vim/plug')
+
+" telescope
+Plug 'nvim-lua/plenary.nvim'
+Plug 'nvim-telescope/telescope.nvim'
+
+" gruvbox
+Plug 'gruvbox-community/gruvbox'
+
+" fugitive - git
+Plug 'tpope/vim-fugitive'
+
+" LSP
+Plug 'williamboman/nvim-lsp-installer'
+Plug 'neovim/nvim-lspconfig'
+Plug 'jose-elias-alvarez/nvim-lsp-ts-utils'
+
+" Completion
+"Plug 'neoclide/coc.nvim', {'branch': 'release'}
+Plug 'hrsh7th/nvim-cmp'
+Plug 'hrsh7th/cmp-nvim-lsp'
+Plug 'hrsh7th/cmp-buffer'
+Plug 'hrsh7th/cmp-path'
+Plug 'L3MON4D3/LuaSnip'
+Plug 'saadparwaiz1/cmp_luasnip'
+
+" JSX/TSX semantic hl
+Plug 'leafgarland/typescript-vim'
+Plug 'peitalin/vim-jsx-typescript'
+
+" LuaLine - ruler stuff
+Plug 'nvim-lualine/lualine.nvim'
+Plug 'arkav/lualine-lsp-progress'
+call plug#end()
+
+"" ============================================================
+"" Init Plugins  ==============================================
+"" ============================================================
+
+" colorscheme
+colorscheme gruvbox
+hi Normal guibg=NONE ctermbg=NONE
+
+"" ============================================================
+"" AUTO_COMPLETE ==============================================
+"" ============================================================
+
+set completeopt=menu,menuone,noselect
+
+lua <<EOF
+  -- Setup nvim-cmp.
+  local cmp = require'cmp'
+
+  cmp.setup({
+    snippet = {
+      -- REQUIRED - you must specify a snippet engine
+      expand = function(args)
+        require('luasnip').lsp_expand(args.body) -- For `luasnip` users.
+      end,
+    },
+    window = {
+      -- completion = cmp.config.window.bordered(),
+      -- documentation = cmp.config.window.bordered(),
+    },
+    mapping = cmp.mapping.preset.insert({
+      ['<C-b>'] = cmp.mapping.scroll_docs(-4),
+      ['<C-f>'] = cmp.mapping.scroll_docs(4),
+      ['<C-CR>'] = cmp.mapping.complete(),
+      ['<C-e>'] = cmp.mapping.abort(),
+      ['<CR>'] = cmp.mapping.confirm({ select = true }), -- Accept currently selected item. Set `select` to `false` to only confirm explicitly selected items.
+    }),
+    sources = cmp.config.sources({
+      { name = 'nvim_lsp' },
+      { name = 'luasnip' }, -- For vsnip users.
+    }, {
+      { name = 'buffer' },
+    })
+  })
+
+  --  ==================================================================
+  -- LSP CONFIGURATION
+  -- ==================================================================
+
+  local lsp_installer = require("nvim-lsp-installer")
+  lsp_installer.settings({
+      ui = {
+          icons = {
+              server_installed = "✓",
+              server_pending = "➜",
+              server_uninstalled = "✗"
+          }
+      }
+  })
+  lsp_installer.setup{}
+
+  local on_attach = function()
+    vim.keymap.set("n", "K", vim.lsp.buf.hover, {buffer=0})
+  end
+
+  local capabilities = require('cmp_nvim_lsp').update_capabilities(vim.lsp.protocol.make_client_capabilities())
+  require('lspconfig').tsserver.setup {
+    capabilities = capabilities,
+    init_options = require("nvim-lsp-ts-utils").init_options,
+    --
+    on_attach = function(client, bufnr)
+        local ts_utils = require("nvim-lsp-ts-utils")
+
+        -- defaults
+        ts_utils.setup({
+            debug = false,
+            disable_commands = false,
+            enable_import_on_completion = true,
+
+            -- import all
+            import_all_timeout = 5000, -- ms
+            -- lower numbers = higher priority
+            import_all_priorities = {
+                same_file = 1, -- add to existing import statement
+                local_files = 2, -- git files or files with relative path markers
+                buffer_content = 3, -- loaded buffer content
+                buffers = 4, -- loaded buffer names
+            },
+            import_all_scan_buffers = 100,
+            import_all_select_source = false,
+            -- if false will avoid organizing imports
+            always_organize_imports = true,
+
+            -- filter diagnostics
+            filter_out_diagnostics_by_severity = {},
+            filter_out_diagnostics_by_code = {},
+
+            -- inlay hints
+            auto_inlay_hints = true,
+            inlay_hints_highlight = "Comment",
+            inlay_hints_priority = 200, -- priority of the hint extmarks
+            inlay_hints_throttle = 150, -- throttle the inlay hint request
+            inlay_hints_format = { -- format options for individual hint kind
+                Type = {},
+                Parameter = {},
+                Enum = {},
+                -- Example format customization for `Type` kind:
+                -- Type = {
+                --     highlight = "Comment",
+                --     text = function(text)
+                --         return "->" .. text:sub(2)
+                --     end,
+                -- },
+            },
+
+            -- update imports on file move
+            update_imports_on_move = true,
+            require_confirmation_on_move = false,
+            watch_dir = nil,
+        })
+
+        -- required to fix code action ranges and filter diagnostics
+        ts_utils.setup_client(client)
+
+        -- no default maps, so you may want to define some here
+        local opts = { silent = true }
+        vim.api.nvim_buf_set_keymap(bufnr, "n", "gs", ":TSLspOrganize<CR>", opts)
+        vim.api.nvim_buf_set_keymap(bufnr, "n", "gr", ":TSLspRenameFile<CR>", opts)
+        vim.api.nvim_buf_set_keymap(bufnr, "n", "gi", ":TSLspImportAll<CR>", opts)
+        vim.keymap.set("n", "K", vim.lsp.buf.hover, {buffer=0})
+    end,
+  }
+  require('lspconfig').html.setup {
+    capabilities = capabilities,
+    on_attach=on_attach,
+  }
+  require('lspconfig').gopls.setup {
+    capabilities = capabilities,
+    on_attach=on_attach,
+  }
+  require('lspconfig').pyright.setup {
+    capabilities = capabilities,
+    on_attach=on_attach,
+  }
+
+  --  ==================================================================
+  -- LSP CONFIGURATION
+  -- ==================================================================
+
+EOF
+
+"" ============================================================
+"" AUTO_COMPLETE ==============================================
+"" ============================================================
+
+
+"" ============================================================
+"" LUALINE ====================================================
+"" ============================================================
+
+lua << EOF
+local colors = {
+  yellow = '#ECBE7B',
+  cyan = '#008080',
+  darkblue = '#081633',
+  green = '#98be65',
+  orange = '#FF8800',
+  violet = '#a9a1e1',
+  magenta = '#c678dd',
+  blue = '#51afef',
+  red = '#ec5f67'
+}
+
+local config = {
+  options = {
+    icons_enabled = true,
+    theme = 'gruvbox',
+    component_separators = {'>', '<'},
+    section_separators = {'>', '<'},
+    --
+    disabled_filetypes = {}
+  },
+  sections = {
+    lualine_a = {'mode'},
+    lualine_b = {'filename'},
+    lualine_c = {},
+    lualine_x = {},
+    lualine_y = {'encoding', 'fileformat', 'filetype'},
+    lualine_z = {'branch', 'location'},
+  },
+  inactive_sections = {
+    lualine_a = {},
+    lualine_b = {},
+    lualine_c = {'filename'},
+    lualine_x = {'location'},
+    lualine_y = {},
+    lualine_z = {}
+  },
+  tabline = {},
+  extensions = {}
+}
+
+
+-- Inserts a component in lualine_c at left section
+local function ins_left(component)
+  table.insert(config.sections.lualine_c, component)
+end
+
+-- Inserts a component in lualine_x ot right section
+local function ins_right(component)
+  table.insert(config.sections.lualine_x, component)
+end
+
+ins_left {
+	'lsp_progress',
+	--display_components = { 'lsp_client_name', { 'title', 'percentage', 'message' }},
+	-- With spinner
+	display_components = { 'lsp_client_name', 'spinner', { 'title', 'percentage', 'message' }},
+	colors = {
+	  percentage  = colors.cyan,
+	  title  = colors.cyan,
+	  message  = colors.cyan,
+	  spinner = colors.cyan,
+	  lsp_client_name = colors.magenta,
+	  use = true,
+	},
+	separators = {
+		component = ' ',
+		progress = ' | ',
+		message = { pre = '(', post = ')'},
+		percentage = { pre = '', post = '%% ' },
+		title = { pre = '', post = ': ' },
+		lsp_client_name = { pre = '[', post = ']' },
+		spinner = { pre = '', post = '' },
+		message = { commenced = 'In Progress', completed = 'Completed' },
+	},
+	display_components = { 'lsp_client_name', 'spinner', { 'title', 'percentage', 'message' } },
+	timer = { progress_enddelay = 500, spinner = 1000, lsp_client_name_enddelay = 1000 },
+	spinner_symbols = { '🌑 ', '🌒 ', '🌓 ', '🌔 ', '🌕 ', '🌖 ', '🌗 ', '🌘 ' },
+}
+
+require('lualine').setup(config)
+EOF
